@@ -1,0 +1,22 @@
+"""Reconstruye la carpeta del kit a partir de kit_v2_texto.txt y kit_v2_imagenes_base64.txt.
+Uso: python3 /mnt/project/desempaquetar_kit.txt [carpeta_destino]   (por defecto /home/claude/kit)"""
+import os, sys, re, base64
+dest = sys.argv[1] if len(sys.argv) > 1 else "/home/claude/kit"
+buscar = ["/mnt/project", "/mnt/user-data/uploads", os.getcwd(), os.path.dirname(os.path.abspath(__file__))]
+def ubicar(nombre):
+    for d in buscar:
+        p = os.path.join(d, nombre)
+        if os.path.exists(p): return p
+    raise SystemExit("No encuentro " + nombre + " en " + ", ".join(buscar) + ". Adjúntalo al chat.")
+n = 0
+txt = open(ubicar("kit_v2_texto.txt"), encoding="utf8").read()
+for m in re.finditer(r"\n#### FILE: (.+?) ####\n(.*?)\n#### END ####\n", txt, re.S):
+    p = os.path.join(dest, m.group(1)); os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, "w", encoding="utf8").write(m.group(2) + "\n"); n += 1
+img = open(ubicar("kit_v2_imagenes_base64.txt"), encoding="utf8").read()
+for m in re.finditer(r"\n#### IMG: (.+?) ####\n(.*?)\n#### END ####\n", img, re.S):
+    p = os.path.join(dest, m.group(1)); os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, "wb").write(base64.b64decode("".join(m.group(2).split()))); n += 1
+sh = os.path.join(dest, "instalar.sh")
+if os.path.exists(sh): os.chmod(sh, 0o755)
+print("kit reconstruido en", dest, "->", n, "archivos. Siguiente paso: bash", sh)
