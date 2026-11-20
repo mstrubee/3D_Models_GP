@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rack Repisas HP · v0</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eceeea;
+    --panel: #ffffff;
+    --ink: #1c2420;
+    --muted: #59645e;
+    --line: #cbd1cc;
+    --accent: #1d5c47;
+    --accent-ink: #ffffff;
+    --btn: #e1e6e2;
+    --grid: #bcc4be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #141917;
+      --panel: #1c2320;
+      --ink: #e5eae7;
+      --muted: #93a099;
+      --line: #33403a;
+      --accent: #6fcfa8;
+      --accent-ink: #0f1a15;
+      --btn: #29332f;
+      --grid: #2b3530;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .1px; }
+  #readout { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  #stage { position: relative; flex: 1 1 auto; min-height: 260px; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; min-height: 40px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #count { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  details { border-top: 1px solid var(--line); padding: 0 16px; font-size: 13.5px; line-height: 1.5; }
+  summary { padding: 11px 0; cursor: pointer; font-weight: 600; }
+  details ul { margin: 0 0 10px; padding-left: 18px; }
+  details li { margin: 2px 0; }
+  details h2 { margin: 8px 0 4px; font-size: 13.5px; }
+  .pending li::marker { color: var(--accent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rack Repisas HP · v0</h1>
+  <p id="readout"></p>
+</header>
+
+<div id="stage">
+  <canvas id="cv" aria-label="Vista 3D del rack. Arrastra para girar, pellizca para acercar."></canvas>
+  <div class="hint">Arrastra para girar · pellizca o rueda para acercar</div>
+</div>
+
+<div class="controls">
+  <div class="group" role="group" aria-label="Fondo">
+    <span>Fondo</span>
+    <button id="d30" aria-pressed="true">30 cm</button>
+    <button id="d60" aria-pressed="false">60 cm</button>
+  </div>
+  <div class="group" role="group" aria-label="Módulos en hilera">
+    <span>Módulos</span>
+    <button id="less" aria-label="Quitar un módulo">−</button>
+    <span id="count">1</span>
+    <button id="more" aria-label="Agregar un módulo">+</button>
+  </div>
+  <button id="reset">Vista inicial</button>
+</div>
+
+<details>
+  <summary>Qué está confirmado y qué falta validar</summary>
+  <h2>Confirmado</h2>
+  <ul>
+    <li>Módulo de 122 cm de ancho exterior, con 30 cm o 60 cm de profundidad.</li>
+    <li>Altura total 3 m y 12 repisas (rótulo del plano).</li>
+    <li>Montantes de acero galvanizado perforado, repisas de madera con borde metálico, módulos contiguos con montante compartido (foto).</li>
+  </ul>
+  <h2>Supuestos por validar</h2>
+  <ul class="pending">
+    <li>Montante en ángulo de 4 × 4 cm; perforado solo referencial.</li>
+    <li>Tablero de 1,8 cm de espesor; borde metálico de 3 cm.</li>
+    <li>Primera repisa a 15 cm del suelo y separación pareja entre las 12.</li>
+    <li>El modelo de 60 cm tiene también 3 m y 12 repisas.</li>
+  </ul>
+</details>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*BUILD_START*/
+const SPEC = {
+  W: 122,        // ancho exterior del módulo (cm), confirmado
+  H: 300,        // altura total (cm)
+  N: 12,         // repisas
+  S: 4,          // lado del montante en ángulo (cm)
+  T: 0.25,       // espesor de la chapa del montante (cm)
+  BOARD_T: 1.8,  // espesor del tablero (cm)
+  BASE: 15,      // cara superior de la primera repisa (cm)
+  TOP_GAP: 2,    // la última repisa queda a H - TOP_GAP
+  LIP_H: 3,      // alto del borde metálico (cm)
+  LIP_T: 0.2     // espesor del borde metálico (cm)
+};
+
+function buildRack(THREE, o, mats) {
+  const { W, H, N, S, T, BOARD_T, BASE, TOP_GAP, LIP_H, LIP_T } = SPEC;
+  const D = o.depth, M = o.modules;
+  const pitchX = W - S;                       // montante compartido
+  const g = new THREE.Group();
+  const box = (sx, sy, sz, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+
+  // Montantes: ángulo en L, 2 por lado de cada módulo, compartidos entre módulos contiguos
+  for (let i = 0; i <= M; i++) {
+    const x0 = i * pitchX;                    // borde izquierdo del montante
+    [0, D - S].forEach((z0, k) => {
+      const zOuter = k === 0 ? z0 + T / 2 : z0 + S - T / 2;
+      box(S, H, T, x0 + S / 2, H / 2, zOuter, mats.post);          // ala paralela al frente
+      box(T, H, S, x0 + T / 2, H / 2, z0 + S / 2, mats.post);      // ala perpendicular
+    });
+  }
+
+  // Repisas: tablero + borde metálico delante y atrás
+  const topY = H - TOP_GAP;
+  const pitchY = (topY - BASE) / (N - 1);
+  for (let m = 0; m < M; m++) {
+    const xa = m * pitchX + S, xb = (m + 1) * pitchX;
+    const len = xb - xa, cx = (xa + xb) / 2;
+    for (let i = 0; i < N; i++) {
+      const yTop = BASE + i * pitchY;
+      box(len, BOARD_T, D, cx, yTop - BOARD_T / 2, D / 2, mats.board);
+      const ly = yTop - LIP_H / 2 + 0.5;
+      box(len, LIP_H, LIP_T, cx, ly, LIP_T / 2, mats.lip);
+      box(len, LIP_H, LIP_T, cx, ly, D - LIP_T / 2, mats.lip);
+    }
+  }
+  g.userData = { pitchY, shelves: N * M, widthTotal: M * pitchX + S, depth: D, height: H };
+  return g;
+}
+/*BUILD_END*/
+
+if (typeof window !== 'undefined') {
+  const cv = document.getElementById('cv');
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 5, 4000);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  sun.position.set(300, 500, 400);
+  scene.add(sun);
+
+  // Textura del montante: ranuras cada 5 cm (referencial)
+  const tex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#b3b9bd'; x.fillRect(0, 0, 64, 64);
+    x.fillStyle = '#3d4348';
+    x.beginPath(); x.ellipse(32, 32, 7, 13, 0, 0, Math.PI * 2); x.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, SPEC.H / 5);
+    return t;
+  })();
+  const mats = {
+    post:  new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, metalness: 0.55, roughness: 0.45 }),
+    board: new THREE.MeshStandardMaterial({ color: 0xc9a46c, roughness: 0.85 }),
+    lip:   new THREE.MeshStandardMaterial({ color: 0x9aa2a6, metalness: 0.6, roughness: 0.4 })
+  };
+
+  let state = { depth: 30, modules: 1 };
+  let rack = null, grid = null;
+  let target = new THREE.Vector3(), th = -0.62, ph = 1.18, radius = 600;
+
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar('--bg'));
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+    grid = new THREE.GridHelper(800, 80, new THREE.Color(cssVar('--grid')), new THREE.Color(cssVar('--grid')));
+    grid.position.set(target.x, -0.05, target.z);
+    scene.add(grid);
+  }
+
+  function fit() {
+    const u = rack.userData;
+    target.set(u.widthTotal / 2, u.height * 0.5, u.depth / 2);
+    radius = Math.max(u.height * 1.9, u.widthTotal * 1.5);
+    th = -0.62; ph = 1.18;
+    if (grid) grid.position.set(target.x, -0.05, target.z);
+  }
+
+  function rebuild(resetView) {
+    if (rack) {
+      scene.remove(rack);
+      rack.traverse(n => { if (n.geometry) n.geometry.dispose(); });
+    }
+    rack = buildRack(THREE, state, mats);
+    scene.add(rack);
+    if (resetView) fit();
+    const u = rack.userData;
+    const row = state.modules > 1
+      ? ` · hilera de ${state.modules}: ${u.widthTotal.toFixed(0)} cm de largo`
+      : '';
+    document.getElementById('readout').textContent =
+      `Módulo ${SPEC.W} × ${state.depth} cm · alto ${SPEC.H} cm · ${SPEC.N} repisas` + row +
+      ` · separación ≈ ${u.pitchY.toFixed(1)} cm`;
+    document.getElementById('count').textContent = state.modules;
+    document.getElementById('d30').setAttribute('aria-pressed', state.depth === 30);
+    document.getElementById('d60').setAttribute('aria-pressed', state.depth === 60);
+  }
+
+  document.getElementById('d30').onclick = () => { state.depth = 30; rebuild(true); };
+  document.getElementById('d60').onclick = () => { state.depth = 60; rebuild(true); };
+  document.getElementById('less').onclick = () => { state.modules = Math.max(1, state.modules - 1); rebuild(true); };
+  document.getElementById('more').onclick = () => { state.modules = Math.min(4, state.modules + 1); rebuild(true); };
+  document.getElementById('reset').onclick = () => fit();
+
+  // Órbita: un dedo gira, dos dedos o rueda acercan
+  const pts = new Map(); let lastDist = 0;
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    lastDist = 0;
+  });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) {
+      th -= dx * 0.007;
+      ph = Math.min(1.53, Math.max(0.12, ph - dy * 0.007));
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastDist) radius = Math.min(1800, Math.max(120, radius * lastDist / d));
+      lastDist = d;
+    }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = 0; };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    radius = Math.min(1800, Math.max(120, radius * Math.exp(e.deltaY * 0.001)));
+  }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+  rebuild(true);
+  applyTheme();
+  resize();
+
+  (function loop() {
+    camera.position.set(
+      target.x + radius * Math.sin(ph) * Math.sin(th),
+      target.y + radius * Math.cos(ph),
+      target.z + radius * Math.sin(ph) * Math.cos(th)
+    );
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+}
+</script>
+</body>
+</html>

@@ -63,3 +63,9 @@ Todos los valores que usan los modelos y el visor. Origen: [plano] viene del pla
 ## Estilo y entrega
 - Español, respuestas cortas para pantalla de teléfono, sin preámbulos, sin viñetas al rechazar algo. Cada entrega: el archivo presentado, lo verificado, lo supuesto y una sola pregunta.
 - Datos mínimos por tienda nueva: planta DXF o PDF, elevaciones PDF, plano eléctrico PDF, alturas interiores de bodega y sala, altura del cielo de la sala, límite entre ambas alturas y fotos de las piezas que no estén en la biblioteca.
+
+## Preguntas abiertas (consolidadas)
+- Santa Rosa: ¿la altura interior es 3,33 m (la indicada) o 3,22 m (la del plano)? Plano eléctrico de Santa Rosa (pedido, sin respuesta). Límite y alturas bodega/sala. Orientación de racks y góndolas. Diferencia entre repisas HP leídas (60 de 30 y 10 de 60) y las del plano (57 y 11). Altura de RV2. ¿Starken debe seguir visible en el fotomontaje?
+- Chillán: límite y alturas bodega/sala (galpón 10,97 m medido de la elevación), frente de racks y góndolas, estándar de alturas de los muebles guardados.
+- Talca: límite de alturas x = 16372 (eje estructural, supuesto), L02 a 4 m sobre el cielo de 3,87 m de la bodega, qué rack de pallets mira hacia dónde, accesorios de baños y cocina.
+- General: si las cabeceras HP (65 × 30) deben construirse como repisas HP; si la cenefa de baterías debe verse también por la espalda (hoy se refleja); si el desplazamiento con dos dedos debe seguir el piso en lugar de ser paralelo a la pantalla; si se limpian las versiones antiguas de Talca (v0 a v28; la vigente es v39).

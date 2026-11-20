@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rack de baterías · v2</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eceeea;
+    --panel: #ffffff;
+    --ink: #1c2420;
+    --muted: #59645e;
+    --line: #cbd1cc;
+    --accent: #b8470a;
+    --accent-ink: #ffffff;
+    --btn: #e1e6e2;
+    --grid: #bcc4be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #1a201d;
+      --panel: #1c2320;
+      --ink: #e5eae7;
+      --muted: #93a099;
+      --line: #33403a;
+      --accent: #ff8a3d;
+      --accent-ink: #1a0e05;
+      --btn: #29332f;
+      --grid: #2f3a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; }
+  #readout { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  #stage { position: relative; flex: 1 1 auto; min-height: 260px; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; min-height: 40px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #count { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  details { border-top: 1px solid var(--line); padding: 0 16px; font-size: 13.5px; line-height: 1.5; max-height: 40vh; overflow: auto; }
+  summary { padding: 11px 0; cursor: pointer; font-weight: 600; }
+  details ul { margin: 0 0 10px; padding-left: 18px; }
+  details li { margin: 2px 0; }
+  details h2 { margin: 8px 0 4px; font-size: 13.5px; }
+  .pending li::marker { color: var(--accent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rack de baterías · v2</h1>
+  <p id="readout"></p>
+</header>
+
+<div id="stage">
+  <canvas id="cv" aria-label="Vista 3D del rack de baterías con su cenefa. Arrastra para girar, pellizca para acercar."></canvas>
+  <div class="hint">Arrastra para girar · pellizca o rueda para acercar</div>
+</div>
+
+<div class="controls">
+  <div class="group" role="group" aria-label="Racks en hilera">
+    <span>Racks</span>
+    <button id="less" aria-label="Quitar un rack">−</button>
+    <span id="count">3</span>
+    <button id="more" aria-label="Agregar un rack">+</button>
+  </div>
+  <button id="cen" aria-pressed="true">Cenefa</button>
+  <button id="reset">Vista inicial</button>
+</div>
+
+<details>
+  <summary>Qué está confirmado y qué falta validar</summary>
+  <h2>Confirmado</h2>
+  <ul>
+    <li>Rack de 150 × 100 cm, en hilera de 3 (rótulo y plano).</li>
+    <li>Altura del rack: 240 cm. Cenefa de 150 cm, aparte del rack y sobre las tres caras frontales.</li>
+    <li>Rack y cenefa se traslapan y juntos no superan 3 m (dato tuyo).</li>
+    <li>Estructura de acero negro con montantes de tubo y niveles de repisa con labio (fotos).</li>
+  </ul>
+  <h2>Supuestos por validar</h2>
+  <ul class="pending">
+    <li>Tomé "no superan 3 m" como 3,00 m exactos: la cenefa va de 150 a 300 cm. Por eso sus últimos 60 cm quedan sobre los montantes de 240 cm, como panel colgado.</li>
+    <li>Entendí que los 150 cm son el alto de la cenefa. Cada panel queda de unos 143 × 144 cm.</li>
+    <li>5 niveles de repisa, a 20, 48, 76, 104 y 132 cm, inclinados 5° hacia el frente, todos bajo la cenefa. El número y la altura de los niveles son estimaciones.</li>
+    <li>Montantes de tubo de 5 × 5 cm, compartidos entre racks contiguos.</li>
+    <li>Los textos de los paneles son referenciales, no la gráfica real.</li>
+    <li>No incluye baterías ni productos.</li>
+  </ul>
+</details>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*BUILD_START*/
+const SPEC = {
+  W: 150, D: 100,                              // huella de un rack (cm)
+  H: 240,                                      // altura del rack, sin cenefa (dato tuyo)
+  LEVELS: [20, 48, 76, 104, 132],              // cara superior de cada nivel, bajo la cenefa (estimado)
+  TILT: 5 * Math.PI / 180,                     // inclinación de las repisas hacia el frente
+  POST: 5,                                     // tubo de los montantes
+  TUBE_H: 4, TUBE_T: 3,                        // vigas bajo cada nivel
+  DECK_T: 1.5, LIP_H: 5,                       // repisa y labio frontal
+  CEN_H: 150, CEN_Y0: 150,                     // cenefa de 150 cm que arranca a 150 cm: rack y cenefa se traslapan
+  FRAME: 3, PANEL_T: 1.2
+};
+
+function buildRack(THREE, o, mats) {
+  const S = SPEC, M = o.modules, Lt = S.W * M;
+  const Ht = o.cenefa ? Math.max(S.H, S.CEN_Y0 + S.CEN_H) : S.H;
+  const g = new THREE.Group();
+  const box = (sx, sy, sz, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); g.add(m); return m;
+  };
+  const postX = i => i === 0 ? S.POST / 2 : (i === M ? Lt - S.POST / 2 : i * S.W);
+  const zB = S.POST / 2, zF = S.D - S.POST / 2;       // ejes de montantes trasero y frontal
+
+  // Montantes compartidos
+  for (let i = 0; i <= M; i++) {
+    [zB, zF].forEach(z => box(S.POST, S.H, S.POST, postX(i), S.H / 2, z, mats.frame));
+  }
+
+  // Vigas bajo cada nivel y brazos laterales
+  S.LEVELS.forEach(lv => {
+    const yb = lv - S.DECK_T - S.TUBE_H / 2;
+    for (let m = 0; m < M; m++) {
+      const len = S.W - S.POST, cx = m * S.W + S.W / 2;
+      box(len, S.TUBE_H, S.TUBE_T, cx, yb, zB, mats.frame);
+      box(len, S.TUBE_H, S.TUBE_T, cx, yb, zF, mats.frame);
+    }
+    for (let i = 0; i <= M; i++) {
+      box(S.TUBE_T, S.TUBE_H, S.D - 2 * S.POST, postX(i), yb, S.D / 2, mats.frame);
+    }
+  });
+
+  // Repisas inclinadas con labio y tira de precios
+  const sd = S.D - S.POST;
+  S.LEVELS.forEach(lv => {
+    for (let m = 0; m < M; m++) {
+      const len = S.W - S.POST, cx = m * S.W + S.W / 2;
+      const grp = new THREE.Group();
+      grp.position.set(cx, lv, S.POST);
+      grp.rotation.x = S.TILT;
+      const add = (sx, sy, sz, x, y, z, mat) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+        mesh.position.set(x, y, z); grp.add(mesh);
+      };
+      add(len, S.DECK_T, sd, 0, -S.DECK_T / 2, sd / 2, mats.deck);
+      add(len, S.LIP_H, 0.8, 0, S.LIP_H / 2 - S.DECK_T, sd - 0.4, mats.deck);
+      add(len - 4, 2.2, 0.15, 0, S.LIP_H / 2 - S.DECK_T - 0.3, sd + 0.05, mats.strip);
+      g.add(grp);
+    }
+  });
+
+  // Cenefa publicitaria: un panel por rack, sobre las caras frontales
+  if (o.cenefa) {
+    const yb = S.CEN_Y0 + S.FRAME / 2, yt = S.CEN_Y0 + S.CEN_H - S.FRAME / 2;
+    for (let m = 0; m < M; m++) {
+      const len = S.W - S.POST, cx = m * S.W + S.W / 2;
+      box(len, S.FRAME, S.FRAME, cx, yb, zF, mats.frame);
+      box(len, S.FRAME, S.FRAME, cx, yt, zF, mats.frame);
+      box(len - 2, S.CEN_H - 2 * S.FRAME, S.PANEL_T, cx, S.CEN_Y0 + S.CEN_H / 2, zF, mats.panel(m % 3));
+    }
+  }
+  g.userData = { length: Lt, depth: S.D, height: Ht, levels: S.LEVELS.length };
+  return g;
+}
+/*BUILD_END*/
+
+if (typeof window !== 'undefined') {
+  const cv = document.getElementById('cv');
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 5, 5000);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 1.0));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+  sun.position.set(300, 600, 500);
+  scene.add(sun);
+  const sun2 = new THREE.DirectionalLight(0xffffff, 0.5);
+  sun2.position.set(-300, 350, 400);
+  scene.add(sun2);
+
+  // Paneles de la cenefa: texto referencial
+  function panelTex(i) {
+    const c = document.createElement('canvas'); c.width = 768; c.height = 768;
+    const x = c.getContext('2d');
+    x.fillStyle = '#f4f4f2'; x.fillRect(0, 0, 768, 768);
+    x.fillStyle = '#d3242b'; x.fillRect(0, 0, 768, 130);
+    x.fillStyle = '#ffffff'; x.font = '700 44px "Avenir Next","Segoe UI",sans-serif'; x.textBaseline = 'middle';
+    const titles = ['CONOCE TU BATERÍA', 'ELIGE LA BATERÍA APROPIADA', 'SERVICIO DE INSTALACIÓN GRATUITO'];
+    x.fillText(titles[i], 28, 68, 712);
+    if (i === 0) {
+      x.fillStyle = '#25282b'; x.fillRect(70, 300, 340, 270);
+      x.fillStyle = '#d3242b'; x.fillRect(130, 262, 80, 40);
+      x.fillStyle = '#e8eaec'; x.fillRect(105, 400, 270, 90);
+      x.fillStyle = '#25282b'; x.font = '700 28px sans-serif';
+      ['(AH)', 'CCA', 'Borne'].forEach((t, k) => x.fillText(t, 450, 330 + k * 60));
+    } else if (i === 1) {
+      x.strokeStyle = '#b9bdc0'; x.lineWidth = 3;
+      for (let r = 0; r < 6; r++) { x.strokeRect(40, 170 + r * 90, 688, 90); }
+      x.fillStyle = '#d3242b'; x.fillRect(40, 170, 688, 90);
+    } else {
+      x.fillStyle = '#d3242b'; x.fillRect(0, 130, 768, 638);
+      x.fillStyle = '#ffffff'; x.font = '700 64px sans-serif';
+      x.fillText('INSTALACIÓN', 60, 360); x.fillText('GRATUITA', 60, 440);
+    }
+    return new THREE.CanvasTexture(c);
+  }
+  const panelMats = [0, 1, 2].map(i => {
+    const side = new THREE.MeshStandardMaterial({ color: 0xe9e9e6, roughness: 0.8 });
+    const front = new THREE.MeshStandardMaterial({ map: panelTex(i), roughness: 0.7 });
+    return [side, side, side, side, front, side];
+  });
+  const mats = {
+    frame: new THREE.MeshStandardMaterial({ color: 0x2b2e31, roughness: 0.5, metalness: 0.3 }),
+    deck:  new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.55, metalness: 0.25 }),
+    strip: new THREE.MeshStandardMaterial({ color: 0xf1f1ee, roughness: 0.6 }),
+    panel: i => panelMats[i]
+  };
+
+  let state = { modules: 3, cenefa: true };
+  let model = null, grid = null;
+  let target = new THREE.Vector3(), th = 0.35, ph = 1.3, radius = 700;
+
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar('--bg'));
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+    grid = new THREE.GridHelper(1400, 140, new THREE.Color(cssVar('--grid')), new THREE.Color(cssVar('--grid')));
+    grid.position.set(target.x, -0.05, target.z);
+    scene.add(grid);
+  }
+
+  function fit() {
+    const u = model.userData;
+    target.set(u.length / 2, u.height * 0.5, u.depth / 2);
+    radius = Math.max(u.height * 2.3, u.length * 1.35);
+    th = 0.35; ph = 1.3;
+    if (grid) grid.position.set(target.x, -0.05, target.z);
+  }
+
+  function rebuild(resetView) {
+    if (model) {
+      scene.remove(model);
+      model.traverse(n => { if (n.geometry) n.geometry.dispose(); });
+    }
+    model = buildRack(THREE, state, mats);
+    scene.add(model);
+    if (resetView) fit();
+    const u = model.userData;
+    document.getElementById('readout').textContent =
+      `${state.modules} ${state.modules === 1 ? 'rack' : 'racks'} · ${u.length} × ${u.depth} cm · alto ${u.height} cm` +
+      (state.cenefa ? ` · cenefa de ${SPEC.CEN_H} cm desde los ${SPEC.CEN_Y0} cm` : '') + ` · ${u.levels} niveles`;
+    document.getElementById('count').textContent = state.modules;
+    document.getElementById('cen').setAttribute('aria-pressed', state.cenefa);
+  }
+
+  document.getElementById('less').onclick = () => { state.modules = Math.max(1, state.modules - 1); rebuild(true); };
+  document.getElementById('more').onclick = () => { state.modules = Math.min(4, state.modules + 1); rebuild(true); };
+  document.getElementById('cen').onclick = () => { state.cenefa = !state.cenefa; rebuild(true); };
+  document.getElementById('reset').onclick = () => fit();
+
+  const pts = new Map(); let lastDist = 0;
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    lastDist = 0;
+  });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) {
+      th -= dx * 0.007;
+      ph = Math.min(1.53, Math.max(0.12, ph - dy * 0.007));
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastDist) radius = Math.min(2500, Math.max(100, radius * lastDist / d));
+      lastDist = d;
+    }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = 0; };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    radius = Math.min(2500, Math.max(100, radius * Math.exp(e.deltaY * 0.001)));
+  }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+  rebuild(true);
+  applyTheme();
+  resize();
+
+  (function loop() {
+    camera.position.set(
+      target.x + radius * Math.sin(ph) * Math.sin(th),
+      target.y + radius * Math.cos(ph),
+      target.z + radius * Math.sin(ph) * Math.cos(th)
+    );
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+}
+</script>
+</body>
+</html>

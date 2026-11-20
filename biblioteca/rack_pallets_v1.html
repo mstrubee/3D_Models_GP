@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rack de pallets · v1</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eceeea;
+    --panel: #ffffff;
+    --ink: #1c2420;
+    --muted: #59645e;
+    --line: #cbd1cc;
+    --accent: #b8470a;
+    --accent-ink: #ffffff;
+    --btn: #e1e6e2;
+    --grid: #bcc4be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #1a201d;
+      --panel: #1c2320;
+      --ink: #e5eae7;
+      --muted: #93a099;
+      --line: #33403a;
+      --accent: #ff8a3d;
+      --accent-ink: #1a0e05;
+      --btn: #29332f;
+      --grid: #2f3a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; }
+  #readout { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  #stage { position: relative; flex: 1 1 auto; min-height: 260px; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; min-height: 40px; cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #count { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  details { border-top: 1px solid var(--line); padding: 0 16px; font-size: 13.5px; line-height: 1.5; max-height: 40vh; overflow: auto; }
+  summary { padding: 11px 0; cursor: pointer; font-weight: 600; }
+  details ul { margin: 0 0 10px; padding-left: 18px; }
+  details li { margin: 2px 0; }
+  details h2 { margin: 8px 0 4px; font-size: 13.5px; }
+  .pending li::marker { color: var(--accent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rack de pallets · v1</h1>
+  <p id="readout"></p>
+</header>
+<div id="stage">
+  <canvas id="cv" aria-label="Vista 3D de Rack de pallets · v1. Arrastra para girar, pellizca para acercar."></canvas>
+  <div class="hint">Arrastra para girar · pellizca o rueda para acercar</div>
+</div>
+<div class="controls">
+  <div class="group" role="group" aria-label="Pallets de ancho"><span>Ancho</span><button data-pw="1">1</button><button data-pw="2" aria-pressed="true">2</button><button data-pw="3">3</button></div>
+  <div class="group" role="group" aria-label="Pallets de alto"><span>Alto</span><button data-pl="2">2</button><button data-pl="3" aria-pressed="true">3</button></div>
+  <button id="reset">Vista inicial</button>
+</div>
+<details>
+  <summary>Qué está confirmado y qué falta validar</summary>
+  <h2>Confirmado</h2>
+  <ul>
+    <li>Rack de pallets con bastidores gris oscuro con diagonales y vigas naranjas (foto).</li>
+    <li>Un rack de 2 pallets de ancho tiene los dos espacios iguales; el de la foto es de 3 pallets de ancho (dato tuyo).</li>
+    <li>Los de Talca son de 2 pallets de ancho y 3 de alto: uno a piso y dos en niveles superiores (dato tuyo).</li>
+    <li>Pilares de 2,5 m y dos travesaños a 1 y 2 m de altura (dato tuyo).</li>
+    <li>Huella de 220 × 120 cm (plano).</li>
+  </ul>
+  <h2>Supuestos por validar</h2>
+  <ul class="pending">
+    <li>Montantes de 8 × 8 cm, vigas de 12 × 5 cm y diagonales cada 90 cm.</li>
+    <li>No incluye los pallets, la perforación de los montantes ni los seguros de las vigas.</li>
+  </ul>
+</details>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*BUILD_START*/
+const SPEC = {
+  D: 120,                  // fondo (plano: 120 cm)
+  H: 250,                  // altura de los pilares (dato tuyo: 2,5 m)
+  UP_W: 8, UP_D: 8,        // montante: ancho a lo largo y fondo (estimado)
+  SPACE: 102,              // largo de cada espacio de pallet; 2 espacios + 2 montantes = 220 cm
+  BEAM_H: 12, BEAM_T: 5,   // viga naranja
+  LEVELS: [100, 200],      // travesaños a 1 y 2 m (dato tuyo): piso + 2 niveles = 3 pallets de alto
+  BASE: 14                 // placa de anclaje
+};
+
+function buildRackPallets(THREE, o, mats) {
+  const S = SPEC, N = o.pallets || 2, NL = o.levels || 3, D = S.D, H = S.H;
+  const L = S.SPACE * N + 2 * S.UP_W;                         // largo total: espacios iguales entre bastidores
+  const g = new THREE.Group();
+  const box = (sx, sy, sz, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); g.add(m); return m;
+  };
+  const zF = S.UP_D / 2, zB = D - S.UP_D / 2;
+  // Dos bastidores de extremo: montantes delantero y trasero, placas de anclaje, diagonales y amarres
+  [S.UP_W / 2, L - S.UP_W / 2].forEach(x => {
+    [zF, zB].forEach(z => {
+      box(S.UP_W, H, S.UP_D, x, H / 2, z, mats.frame);
+      const px0 = x < L / 2 ? (S.UP_W + 4) / 2 : L - (S.UP_W + 4) / 2, pz0 = z < D / 2 ? (S.UP_D + 4) / 2 : D - (S.UP_D + 4) / 2;
+      box(S.UP_W + 4, 1.2, S.UP_D + 4, px0, 0.6, pz0, mats.frame);     // placa de anclaje, dentro de la huella
+    });
+    const n = Math.max(2, Math.round((H - 50) / 90)), step = (H - 50) / n;
+    for (let k = 0; k < n; k++) {
+      const y0 = 25 + k * step, y1 = y0 + step, a = k % 2 ? zB : zF, b = k % 2 ? zF : zB;
+      const dz = b - a, dy = step, d = box(3, Math.hypot(dz, dy), 3, x, (y0 + y1) / 2, (a + b) / 2, mats.frame);
+      d.rotation.x = Math.atan2(dz, dy);
+      box(4, 3, D - 2 * S.UP_D, x, y0, D / 2, mats.frame);
+    }
+    box(4, 3, D - 2 * S.UP_D, x, 25 + n * step, D / 2, mats.frame);
+  });
+  // Vigas naranjas delanteras y traseras en cada nivel
+  S.LEVELS.slice(0, Math.max(0, NL - 1)).forEach(lv => {
+    [zF, zB].forEach(z => box(L - 2 * S.UP_W, S.BEAM_H, S.BEAM_T, L / 2, lv - S.BEAM_H / 2, z, mats.beam));
+  });
+  g.userData = { length: L, depth: D, height: H, pallets: N, levels: NL };
+  return g;
+}
+/*BUILD_END*/
+
+if (typeof window !== 'undefined') {
+  const cv = document.getElementById('cv'), stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 5, 5000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 1.0));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(300, 600, 500); scene.add(sun);
+  const sun2 = new THREE.DirectionalLight(0xffffff, 0.6); sun2.position.set(-250, 350, 500); scene.add(sun2);
+  const dotTex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#26282b'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#5b6065';
+    [[16, 16], [48, 48]].forEach(([a, b]) => { x.beginPath(); x.arc(a, b, 4.2, 0, Math.PI * 2); x.fill(); });
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+  })();
+  const mats = { frame: new THREE.MeshStandardMaterial({ color: 0x33363b, roughness: 0.5, metalness: 0.4 }), beam: new THREE.MeshStandardMaterial({ color: 0xe8501a, roughness: 0.4, metalness: 0.3 }) };
+  let state = { modules: 1, open: 0 };
+  let model = null, grid = null;
+  let target = new THREE.Vector3(), th = 0.6, ph = 1.15, radius = 400;
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar('--bg'));
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+    grid = new THREE.GridHelper(1400, 140, new THREE.Color(cssVar('--grid')), new THREE.Color(cssVar('--grid')));
+    grid.position.set(target.x, -0.05, target.z); scene.add(grid);
+  }
+  function fit() {
+    const u = model.userData;
+    target.set(u.length / 2, u.height * 0.5, u.depth / 2);
+    radius = Math.max(u.height * 2.2, u.length * 1.5, 220);
+    th = 0.6; ph = 1.15;
+    if (grid) grid.position.set(target.x, -0.05, target.z);
+  }
+  function rebuild(resetView) {
+    if (model) { scene.remove(model); model.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
+    model = buildRackPallets(THREE, state, mats);
+    scene.add(model);
+    if (resetView) fit();
+    const u = model.userData;
+    document.getElementById('readout').textContent = `${u.pallets} pallets de ancho × ${u.levels} de alto · ${u.length} × ${u.depth} cm · alto ${u.height} cm`;
+    
+  }
+  
+  
+  const syncB = () => { document.querySelectorAll('[data-pw]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.pw === (state.pallets || 2))); document.querySelectorAll('[data-pl]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.pl === (state.levels || 3))); };
+  document.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { state.pallets = +b.dataset.pw; syncB(); rebuild(true); });
+  document.querySelectorAll('[data-pl]').forEach(b => b.onclick = () => { state.levels = +b.dataset.pl; syncB(); rebuild(false); });
+  document.getElementById('reset').onclick = () => fit();
+  const pts = new Map(); let lastDist = 0;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); lastDist = 0; });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) { th -= dx * 0.007; ph = Math.min(1.53, Math.max(0.12, ph - dy * 0.007)); }
+    else if (pts.size === 2) { const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (lastDist) radius = Math.min(2500, Math.max(90, radius * lastDist / d)); lastDist = d; }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); radius = Math.min(2500, Math.max(90, radius * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(stage);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  rebuild(true); applyTheme(); resize();
+  (function loop() {
+    camera.position.set(target.x + radius * Math.sin(ph) * Math.sin(th), target.y + radius * Math.cos(ph), target.z + radius * Math.sin(ph) * Math.cos(th));
+    camera.lookAt(target); renderer.render(scene, camera); requestAnimationFrame(loop);
+  })();
+}
+</script>
+</body>
+</html>

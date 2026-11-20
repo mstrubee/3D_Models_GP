@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mesón de atención · v1</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eceeea;
+    --panel: #ffffff;
+    --ink: #1c2420;
+    --muted: #59645e;
+    --line: #cbd1cc;
+    --accent: #b8470a;
+    --accent-ink: #ffffff;
+    --btn: #e1e6e2;
+    --grid: #bcc4be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #141917;
+      --panel: #1c2320;
+      --ink: #e5eae7;
+      --muted: #93a099;
+      --line: #33403a;
+      --accent: #ff8a3d;
+      --accent-ink: #1a0e05;
+      --btn: #29332f;
+      --grid: #2b3530;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; }
+  #readout { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  #stage { position: relative; flex: 1 1 auto; min-height: 260px; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; min-height: 40px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #count { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  details { border-top: 1px solid var(--line); padding: 0 16px; font-size: 13.5px; line-height: 1.5; max-height: 40vh; overflow: auto; }
+  summary { padding: 11px 0; cursor: pointer; font-weight: 600; }
+  details ul { margin: 0 0 10px; padding-left: 18px; }
+  details li { margin: 2px 0; }
+  details h2 { margin: 8px 0 4px; font-size: 13.5px; }
+  .pending li::marker { color: var(--accent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mesón de atención · v1</h1>
+  <p id="readout"></p>
+</header>
+
+<div id="stage">
+  <canvas id="cv" aria-label="Vista 3D del mesón de atención. Arrastra para girar, pellizca para acercar."></canvas>
+  <div class="hint">Arrastra para girar · pellizca o rueda para acercar</div>
+</div>
+
+<div class="controls">
+  <div class="group" role="group" aria-label="Módulos en hilera">
+    <span>Módulos</span>
+    <button id="less" aria-label="Quitar un módulo">−</button>
+    <span id="count">1</span>
+    <button id="more" aria-label="Agregar un módulo">+</button>
+  </div>
+  <div class="group" role="group" aria-label="Lado visible">
+    <span>Lado</span>
+    <button id="sideF" aria-pressed="true">Cliente</button>
+    <button id="sideB" aria-pressed="false">Equipos</button>
+  </div>
+  <button id="reset">Vista inicial</button>
+</div>
+
+<details>
+  <summary>Qué está confirmado y qué falta validar</summary>
+  <h2>Confirmado</h2>
+  <ul>
+    <li>Altura total 110 cm (dato tuyo).</li>
+    <li>Módulo de 124 cm de largo y envolvente de 90 cm de fondo, con hileras de hasta 4 módulos (plano).</li>
+    <li>Dos cuerpos por módulo, de 33 y 45 cm de fondo, con 6 cm de separación (plano).</li>
+    <li>Cubierta naranja, paneles de extremo naranjos, fondo perforado negro, repisas negras con labio y zócalo negro (fotos).</li>
+    <li>La cara de equipos es igual a la del cliente, siempre vacía (dato tuyo).</li>
+    <li>Las cabeceras altas quedan detrás del mesón (dato tuyo).</li>
+  </ul>
+  <h2>Supuestos por validar</h2>
+  <ul class="pending">
+    <li>El cuerpo de 45 cm es el del cliente y el de 33 cm el de equipos. Lo deduzco de que las cabeceras altas están junto al lado de 33 cm; antes había supuesto lo contrario.</li>
+    <li>Vuelos de la cubierta de 5 cm (cliente) y 1 cm (equipos): el plano los dibuja distinto según la hilera, pero siempre mayores del lado de 45 cm.</li>
+    <li>Cubierta de 6 cm de espesor y paneles de extremo de 3 cm.</li>
+    <li>Repisas a 25 y 55 cm del suelo, estimadas de la foto (±5 cm); aquí van planas.</li>
+    <li>Zócalo de 15 cm de alto, retranqueado 3 cm. Sin divisores entre módulos.</li>
+    <li>No incluye la plataforma gris del suelo, la gráfica del borde ni los accesorios.</li>
+  </ul>
+</details>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*BUILD_START*/
+const SPEC = {
+  L: 124,        // largo de un módulo (cm)
+  H: 110,        // altura total, cara superior de la cubierta (cm)
+  TOP_T: 6,      // espesor de la cubierta
+  OVER_F: 5,     // vuelo de la cubierta, lado cliente (estimado)
+  D_F: 45,       // fondo del cuerpo cliente
+  SPINE: 6,      // separación central
+  D_R: 33,       // fondo del cuerpo equipos
+  OVER_R: 1,     // vuelo de la cubierta, lado equipos (estimado)
+  END_T: 3,      // espesor de los paneles de extremo
+  PLINTH_H: 15,  // alto del zócalo
+  PLINTH_IN: 3,  // retranqueo del zócalo
+  SHELF_T: 2,    // espesor de repisa
+  SHELF_Y: [25, 55], // cara superior de cada repisa
+  LIP_H: 4,      // labio frontal de la repisa
+  BACK_T: 0.6    // espesor del panel perforado
+};
+
+function buildMeson(THREE, o, mats) {
+  const S = SPEC, M = o.modules, Lt = S.L * M;
+  const D = S.OVER_F + S.D_F + S.SPINE + S.D_R + S.OVER_R;   // 90
+  const g = new THREE.Group();
+  const box = (sx, sy, sz, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); g.add(m); return m;
+  };
+  const yTop = S.H - S.TOP_T;                     // cara inferior de la cubierta
+  const bodyH = yTop;                              // los cuerpos llegan hasta la cubierta
+
+  // Cubierta
+  box(Lt, S.TOP_T, D, Lt / 2, S.H - S.TOP_T / 2, D / 2, mats.orange);
+
+  // Cuerpos: [z0, fondo, sentido] (sentido +1: abre hacia z menor, -1: hacia z mayor)
+  const zF0 = S.OVER_F, zF1 = zF0 + S.D_F;
+  const zR0 = zF1 + S.SPINE, zR1 = zR0 + S.D_R;
+  const bodies = [
+    { z0: zF0, z1: zF1, backZ: zF1 - S.BACK_T / 2, open: 'front' },
+    { z0: zR0, z1: zR1, backZ: zR0 + S.BACK_T / 2, open: 'rear' }
+  ];
+
+  // Paneles de extremo (naranjos) en los dos extremos de la hilera, de suelo a cubierta
+  [0, Lt - S.END_T].forEach(x0 => {
+    box(S.END_T, bodyH, zR1 - zF0, x0 + S.END_T / 2, bodyH / 2, (zF0 + zR1) / 2, mats.orange);
+  });
+
+  // Espina central (cierra el espacio entre ambos cuerpos)
+  box(Lt - 2 * S.END_T, bodyH - S.PLINTH_H, S.SPINE, Lt / 2, S.PLINTH_H + (bodyH - S.PLINTH_H) / 2, zF1 + S.SPINE / 2, mats.black);
+
+  const innerL = Lt - 2 * S.END_T, cx = Lt / 2;
+  bodies.forEach(b => {
+    const depth = b.z1 - b.z0;
+    // Zócalo retranqueado
+    const pz0 = b.open === 'front' ? b.z0 + S.PLINTH_IN : b.z0;
+    const pz1 = b.open === 'front' ? b.z1 : b.z1 - S.PLINTH_IN;
+    box(innerL, S.PLINTH_H, pz1 - pz0, cx, S.PLINTH_H / 2, (pz0 + pz1) / 2, mats.black);
+    // Panel perforado de fondo
+    const ph = bodyH - S.PLINTH_H;
+    box(innerL, ph, S.BACK_T, cx, S.PLINTH_H + ph / 2, b.backZ, mats.perf(innerL, ph));
+    // Repisas con labio frontal
+    S.SHELF_Y.forEach(yT => {
+      const sd = depth - S.BACK_T;
+      const zc = b.open === 'front' ? b.z0 + sd / 2 : b.z1 - sd / 2;
+      box(innerL, S.SHELF_T, sd, cx, yT - S.SHELF_T / 2, zc, mats.black);
+      const lz = b.open === 'front' ? b.z0 + 0.4 : b.z1 - 0.4;
+      box(innerL, S.LIP_H, 0.8, cx, yT - S.SHELF_T + S.LIP_H / 2, lz, mats.black);
+    });
+  });
+  g.userData = { length: Lt, depth: D, height: S.H };
+  return g;
+}
+/*BUILD_END*/
+
+if (typeof window !== 'undefined') {
+  const cv = document.getElementById('cv');
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 5, 4000);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+  sun.position.set(300, 500, -300);
+  scene.add(sun);
+  const sun2 = new THREE.DirectionalLight(0xffffff, 0.35);
+  sun2.position.set(-200, 300, 500);
+  scene.add(sun2);
+
+  const dotTex = (() => {
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const x = c.getContext('2d');
+    x.fillStyle = '#1b1d1f'; x.fillRect(0, 0, 32, 32);
+    x.fillStyle = '#4a4e52';
+    x.beginPath(); x.arc(16, 16, 3.2, 0, Math.PI * 2); x.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  })();
+  const mats = {
+    orange: new THREE.MeshStandardMaterial({ color: 0xf05f10, roughness: 0.5 }),
+    black:  new THREE.MeshStandardMaterial({ color: 0x232527, roughness: 0.55, metalness: 0.2 }),
+    perf: (w, h) => {
+      const t = dotTex.clone(); t.needsUpdate = true;
+      t.repeat.set(w / 2.5, h / 2.5);
+      return new THREE.MeshStandardMaterial({ color: 0xffffff, map: t, roughness: 0.6 });
+    }
+  };
+
+  let state = { modules: 1 };
+  let rack = null, grid = null, side = 'F';
+  let target = new THREE.Vector3(), th = 0, ph = 1.15, radius = 400;
+
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar('--bg'));
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+    grid = new THREE.GridHelper(1000, 100, new THREE.Color(cssVar('--grid')), new THREE.Color(cssVar('--grid')));
+    grid.position.set(target.x, -0.05, target.z);
+    scene.add(grid);
+  }
+
+  function fit() {
+    const u = rack.userData;
+    target.set(u.length / 2, u.height * 0.45, u.depth / 2);
+    radius = Math.max(u.length * 1.25, 230);
+    // lado cliente: se mira desde z negativo; lado equipos: desde z positivo
+    th = side === 'F' ? Math.PI + 0.45 : 0.45;
+    ph = 1.12;
+    if (grid) grid.position.set(target.x, -0.05, target.z);
+  }
+
+  function rebuild(resetView) {
+    if (rack) {
+      scene.remove(rack);
+      rack.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material && n.material.map && n.material !== mats.orange) n.material.map.dispose(); });
+    }
+    rack = buildMeson(THREE, state, mats);
+    scene.add(rack);
+    if (resetView) fit();
+    const u = rack.userData;
+    document.getElementById('readout').textContent =
+      `${state.modules} ${state.modules === 1 ? 'módulo' : 'módulos'} · largo ${u.length} cm · fondo ${u.depth} cm · alto ${u.height} cm`;
+    document.getElementById('count').textContent = state.modules;
+    document.getElementById('sideF').setAttribute('aria-pressed', side === 'F');
+    document.getElementById('sideB').setAttribute('aria-pressed', side === 'B');
+  }
+
+  document.getElementById('less').onclick = () => { state.modules = Math.max(1, state.modules - 1); rebuild(true); };
+  document.getElementById('more').onclick = () => { state.modules = Math.min(4, state.modules + 1); rebuild(true); };
+  document.getElementById('sideF').onclick = () => { side = 'F'; rebuild(true); };
+  document.getElementById('sideB').onclick = () => { side = 'B'; rebuild(true); };
+  document.getElementById('reset').onclick = () => fit();
+
+  const pts = new Map(); let lastDist = 0;
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    lastDist = 0;
+  });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) {
+      th -= dx * 0.007;
+      ph = Math.min(1.53, Math.max(0.12, ph - dy * 0.007));
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastDist) radius = Math.min(1800, Math.max(90, radius * lastDist / d));
+      lastDist = d;
+    }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = 0; };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    radius = Math.min(1800, Math.max(90, radius * Math.exp(e.deltaY * 0.001)));
+  }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+  rebuild(true);
+  applyTheme();
+  resize();
+
+  (function loop() {
+    camera.position.set(
+      target.x + radius * Math.sin(ph) * Math.sin(th),
+      target.y + radius * Math.cos(ph),
+      target.z + radius * Math.sin(ph) * Math.cos(th)
+    );
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+}
+</script>
+</body>
+</html>

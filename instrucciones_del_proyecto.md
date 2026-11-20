@@ -5,7 +5,7 @@ Estas instrucciones reemplazan a las anteriores y las contienen completas. Regla
 Objetivo: generar modelos 3D precisos y rápidos de tiendas Autoplanet en diseño, a partir de la planta (DXF), las
 elevaciones de fachada (PDF) y el plano eléctrico (PDF), con la biblioteca y los scripts de este proyecto.
 
-Al empezar cada chat: leer LEEME.md, parametros_del_proyecto.md y estas instrucciones; si el kit no está en /home/claude/kit, reconstruirlo con `python3 /mnt/project/desempaquetar_kit.txt` (el proyecto no acepta ZIP: el kit está en kit_v2_texto.txt y kit_v2_imagenes_base64.txt); ejecutar instalar.sh y trabajar con los scripts del proyecto.
+Al empezar cada chat: leer parametros_del_proyecto.md (archivo del proyecto), clonar el kit con `git clone --depth 1 https://github.com/mstrubee/3D_Models_GP /home/claude/kit` y ejecutar `bash /home/claude/kit/instalar.sh`; leer el LEEME.md del kit y trabajar con sus scripts. Si GitHub no responde, pedir a Matias que adjunte el ZIP del kit.
 
 Reglas de trabajo
 1. Unidades en cm. Verificar la escala del DXF con el área del contorno antes de usar cualquier medida.
@@ -55,6 +55,7 @@ Reglas agregadas en la versión 2 (Santa Rosa, fachadas por zonas marcadas, reco
 42. Información faltante: al empezar cada chat se revisa qué datos mínimos faltan y se piden de a uno, el que más cambia el modelo, como la única pregunta de la entrega. Mientras no lleguen, se modela con el valor por defecto marcado como supuesto en el panel "Supuestos por validar". Orden de prioridad: (1) planta; (2) alturas interiores de bodega y sala; (3) altura del cielo y límite entre alturas; (4) fachada: elevación o, en modo solo plano, alturas de fachada y letrero más las zonas de vidrio, acceso, puerta de carga y muros medianeros marcadas sobre el plano; (5) plano eléctrico; (6) fotos de las piezas que no estén en la biblioteca; (7) foto del lugar y posición de cámara si se quiere fotomontaje. Lo que Matias responde se anota en los parámetros del kit y en la memoria del proyecto.
 43. El cuadro de instrucciones del proyecto lleva el texto completo de estas reglas (instrucciones_para_pegar_en_el_proyecto.md). Claude no puede editar ese cuadro: cada vez que cambie una regla entrega de nuevo ese texto para que Matias lo vuelva a pegar, junto con el kit nuevo.
 
+44. El kit vive en GitHub (https://github.com/mstrubee/3D_Models_GP, público). Claude lo clona al empezar cada chat y no puede subir cambios: cuando cambie algo del kit entrega los archivos modificados y los comandos git (add, commit, push) para que Matias actualice el repo, y sube el número de versión en LEEME.md.
 Errores a evitar (aprendidos)
 - Mezclar RGB (render, PIL) con BGR (OpenCV): el rojo sale azul.
 - Extrapolar un ajuste de cielo hacia el horizonte: genera una banda más clara. Muestrear el color real justo sobre el borde y suavizar a lo ancho.
@@ -69,8 +70,4 @@ Estilo: español, respuestas cortas para pantalla de teléfono, sin preámbulos,
 
 Datos mínimos por tienda nueva: planta DXF o PDF, elevaciones PDF (o, en modo solo plano, las alturas de fachada y letrero), plano eléctrico PDF, alturas interiores de bodega y sala, altura del cielo de la sala, límite entre ambas alturas, y fotos de las piezas que no estén en la biblioteca. Lo que falte se pide de a uno por entrega (regla 42).
 
-Preguntas abiertas (consolidadas)
-- Santa Rosa: ¿la altura interior es 3,33 m (la indicada) o 3,22 m (la del plano)? Plano eléctrico de Santa Rosa (pedido, sin respuesta). Límite y alturas bodega/sala. Orientación de racks y góndolas. Diferencia entre repisas HP leídas (60 de 30 y 10 de 60) y las del plano (57 y 11). Altura de RV2. ¿Starken debe seguir visible en el fotomontaje?
-- Chillán: límite y alturas bodega/sala (galpón 10,97 m medido de la elevación), frente de racks y góndolas, estándar de alturas de los muebles guardados.
-- Talca: límite de alturas x = 16372 (eje estructural, supuesto), L02 a 4 m sobre el cielo de 3,87 m de la bodega, qué rack de pallets mira hacia dónde, accesorios de baños y cocina.
-- General: si las cabeceras HP (65 × 30) deben construirse como repisas HP; si la cenefa de baterías debe verse también por la espalda (hoy se refleja); si el desplazamiento con dos dedos debe seguir el piso en lugar de ser paralelo a la pantalla; si se limpian las versiones antiguas de Talca (v0 a v28; la vigente es v39).
+Preguntas abiertas: están al final de parametros_del_proyecto.md.

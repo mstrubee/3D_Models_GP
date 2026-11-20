@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perimetral · v1</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eceeea;
+    --panel: #ffffff;
+    --ink: #1c2420;
+    --muted: #59645e;
+    --line: #cbd1cc;
+    --accent: #b8470a;
+    --accent-ink: #ffffff;
+    --btn: #e1e6e2;
+    --grid: #bcc4be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #1a201d;
+      --panel: #1c2320;
+      --ink: #e5eae7;
+      --muted: #93a099;
+      --line: #33403a;
+      --accent: #ff8a3d;
+      --accent-ink: #1a0e05;
+      --btn: #29332f;
+      --grid: #2f3a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; }
+  #readout { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  #stage { position: relative; flex: 1 1 auto; min-height: 260px; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; min-height: 40px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #count { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  details { border-top: 1px solid var(--line); padding: 0 16px; font-size: 13.5px; line-height: 1.5; max-height: 40vh; overflow: auto; }
+  summary { padding: 11px 0; cursor: pointer; font-weight: 600; }
+  details ul { margin: 0 0 10px; padding-left: 18px; }
+  details li { margin: 2px 0; }
+  details h2 { margin: 8px 0 4px; font-size: 13.5px; }
+  .pending li::marker { color: var(--accent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Perimetral · v1</h1>
+  <p id="readout"></p>
+</header>
+
+<div id="stage">
+  <canvas id="cv" aria-label="Vista 3D del perimetral. Arrastra para girar, pellizca para acercar."></canvas>
+  <div class="hint">Arrastra para girar · pellizca o rueda para acercar</div>
+</div>
+
+<div class="controls">
+  <div class="group" role="group" aria-label="Tipo y fondo">
+    <span>Tipo</span>
+    <button id="d50" aria-pressed="true">50 · RV1</button>
+    <button id="d70" aria-pressed="false">70 · RV2, RN</button>
+    <button id="d60" aria-pressed="false">60 · neumáticos</button>
+  </div>
+  <div class="group" role="group" aria-label="Módulos en hilera">
+    <span>Módulos</span>
+    <button id="less" aria-label="Quitar un módulo">−</button>
+    <span id="count">1</span>
+    <button id="more" aria-label="Agregar un módulo">+</button>
+  </div>
+  <button id="shuffle">Reordenar repisas</button>
+  <button id="reset">Vista inicial</button>
+</div>
+
+<details>
+  <summary>Qué está confirmado y qué falta validar</summary>
+  <h2>Confirmado</h2>
+  <ul>
+    <li>RV1, RV2 y RN son los perimetrales (dato tuyo).</li>
+    <li>Módulo de 122 cm de ancho y 240 cm de alto; RV1 de 50 cm de fondo (plano).</li>
+    <li>3 o 4 repisas por módulo, al azar (dato tuyo).</li>
+    <li>Los perimetrales con neumáticos tienen 60 cm de fondo y repisas inclinadas (dato y foto tuyos).</li>
+    <li>Panel de fondo negro perforado en dos niveles, montantes ranurados, repisas de acero con labio sobre ménsulas (fotos).</li>
+  </ul>
+  <h2>Supuestos por validar</h2>
+  <ul class="pending">
+    <li>El plano rotula RV2 y RN con 70 cm de fondo, y tú dices que los de neumáticos tienen 60. Dejé ambas opciones hasta saber cuál manda.</li>
+    <li>RV2 también mide 240 cm; el plano no rotula su altura.</li>
+    <li>Con 3 o 4 repisas, la primera va a 30 cm y la última a 200 cm, repartidas parejo.</li>
+    <li>Neumáticos: 3 repisas a 25, 100 y 175 cm, inclinadas 8° hacia el frente. Los neumáticos no están modelados.</li>
+    <li>Cenefa negra de 30 cm de alto y 1 cm de espesor en el borde superior frontal.</li>
+    <li>Junta del panel a media altura; panel desde 12 cm del suelo.</li>
+    <li>Montante de 4 × 3 cm; zócalo de 12 cm retranqueado 3 cm. Perforado referencial.</li>
+    <li>No incluye la plataforma del suelo, el friso gráfico ni la cenefa publicitaria.</li>
+  </ul>
+</details>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*BUILD_START*/
+const SPEC = {
+  W: 122,                                   // ancho de un módulo (cm)
+  H: 240,                                   // altura total (cm)
+  PLINTH_H: 12, PLINTH_IN: 3,               // zócalo
+  PANEL_T: 0.6, SEAM: 0.4,                  // panel perforado y junta
+  POST_W: 4, POST_D: 3,                     // montante ranurado
+  SHELF_MIN: 30, SHELF_MAX: 200,            // primera y última repisa (3 o 4 por módulo, repartidas parejo)
+  SHELF_T: 1.5, LIP_H: 4.5, LIP_T: 0.6,     // repisa y labio
+  ARM_H: 4, ARM_T: 0.4,                     // ménsula
+  CEN_H: 30, CEN_T: 1,                      // cenefa superior
+  TIRE_Y: [25, 100, 175],                   // repisas del módulo de neumáticos (3 niveles)
+  TIRE_TILT: 8 * Math.PI / 180              // inclinación hacia el frente
+};
+
+function rng32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shelfCounts(M, seed) {
+  const r = rng32(seed);
+  return Array.from({ length: M }, () => (r() < 0.5 ? 3 : 4));
+}
+
+function buildPerimetral(THREE, o, mats) {
+  const S = SPEC, M = o.modules, D = o.depth, Lt = S.W * M, tires = D === 60;
+  const g = new THREE.Group();
+  const box = (sx, sy, sz, x, y, z, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); g.add(m); return m;
+  };
+  const postX = i => i === 0 ? S.POST_W / 2 : (i === M ? Lt - S.POST_W / 2 : i * S.W);
+
+  // Panel de fondo en dos niveles, con junta visible a media altura
+  const ph = S.H - S.PLINTH_H, half = (ph - S.SEAM) / 2;
+  box(Lt, half, S.PANEL_T, Lt / 2, S.PLINTH_H + half / 2, S.PANEL_T / 2, mats.perf(Lt, half));
+  box(Lt, half, S.PANEL_T, Lt / 2, S.PLINTH_H + half + S.SEAM + half / 2, S.PANEL_T / 2, mats.perf(Lt, half));
+  // Montantes ranurados
+  for (let i = 0; i <= M; i++) {
+    box(S.POST_W, ph, S.POST_D, postX(i), S.PLINTH_H + ph / 2, S.PANEL_T + S.POST_D / 2, mats.black);
+  }
+  // Zócalo retranqueado
+  box(Lt, S.PLINTH_H, D - S.PLINTH_IN, Lt / 2, S.PLINTH_H / 2, (D - S.PLINTH_IN) / 2, mats.black);
+
+  // Repisas por módulo: 3 o 4 al azar, o 3 inclinadas si es de neumáticos
+  const sd = D - S.PANEL_T;
+  const counts = tires ? Array(M).fill(3) : shelfCounts(M, o.seed);
+  const tilt = tires ? S.TIRE_TILT : 0;
+  for (let m = 0; m < M; m++) {
+    const len = S.W - S.POST_W, cx = m * S.W + S.W / 2, n = counts[m];
+    const ys = tires ? S.TIRE_Y
+      : Array.from({ length: n }, (_, i) => S.SHELF_MIN + i * (S.SHELF_MAX - S.SHELF_MIN) / (n - 1));
+    ys.forEach(yT => {
+      const grp = new THREE.Group();
+      grp.position.set(cx, yT, S.PANEL_T);
+      grp.rotation.x = tilt;                       // el frente baja
+      const add = (sx, sy, sz, x, y, z) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mats.black);
+        mesh.position.set(x, y, z); grp.add(mesh);
+      };
+      add(len, S.SHELF_T, sd, 0, -S.SHELF_T / 2, sd / 2);
+      add(len, S.LIP_H, S.LIP_T, 0, 1 - S.LIP_H / 2, sd - S.LIP_T / 2);
+      [postX(m), postX(m + 1)].forEach(px =>
+        add(S.ARM_T, S.ARM_H, sd - 1, px - cx, -S.SHELF_T - S.ARM_H / 2, (sd - 1) / 2));
+      g.add(grp);
+    });
+  }
+  // Cenefa superior
+  box(Lt, S.CEN_H, S.CEN_T, Lt / 2, S.H - S.CEN_H / 2, D - S.CEN_T / 2, mats.black);
+
+  const shelves = tires ? 3 * M : counts.reduce((a, b) => a + b, 0);
+  g.userData = { length: Lt, depth: D, height: S.H, shelves, counts };
+  return g;
+}
+/*BUILD_END*/
+
+if (typeof window !== 'undefined') {
+  const cv = document.getElementById('cv');
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 5, 5000);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 1.0));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+  sun.position.set(300, 600, 500);
+  scene.add(sun);
+  const sun2 = new THREE.DirectionalLight(0xffffff, 0.5);
+  sun2.position.set(-300, 350, 400);
+  scene.add(sun2);
+
+  const dotTex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#26282b'; x.fillRect(0, 0, 64, 64);
+    x.fillStyle = '#5b6065';
+    [[16, 16], [48, 48]].forEach(([px, py]) => { x.beginPath(); x.arc(px, py, 4.2, 0, Math.PI * 2); x.fill(); });
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  })();
+  const mats = {
+    black: new THREE.MeshStandardMaterial({ color: 0x34373a, roughness: 0.55, metalness: 0.25 }),
+    perf: (w, h) => {
+      const t = dotTex.clone(); t.needsUpdate = true;
+      t.repeat.set(w / 5, h / 5);
+      return new THREE.MeshStandardMaterial({ color: 0xffffff, map: t, roughness: 0.6 });
+    }
+  };
+
+  let state = { depth: 50, modules: 1, seed: 7 };
+  let model = null, grid = null;
+  let target = new THREE.Vector3(), th = 0, ph = 1.2, radius = 500;
+
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar('--bg'));
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+    grid = new THREE.GridHelper(1000, 100, new THREE.Color(cssVar('--grid')), new THREE.Color(cssVar('--grid')));
+    grid.position.set(target.x, -0.05, target.z);
+    scene.add(grid);
+  }
+
+  function fit() {
+    const u = model.userData;
+    target.set(u.length / 2, u.height * 0.5, u.depth / 2);
+    radius = Math.max(u.height * 2.1, u.length * 1.5);
+    th = 0.45; ph = 1.28;
+    if (grid) grid.position.set(target.x, -0.05, target.z);
+  }
+
+  function rebuild(resetView) {
+    if (model) {
+      scene.remove(model);
+      model.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material && n.material.map) n.material.map.dispose(); });
+    }
+    model = buildPerimetral(THREE, state, mats);
+    scene.add(model);
+    if (resetView) fit();
+    const u = model.userData;
+    const detalle = state.depth === 60
+      ? '3 repisas inclinadas por módulo'
+      : 'repisas por módulo: ' + u.counts.join(', ');
+    document.getElementById('readout').textContent =
+      `${state.modules} ${state.modules === 1 ? 'módulo' : 'módulos'} · largo ${u.length} cm · fondo ${u.depth} cm · alto ${u.height} cm · ${detalle}`;
+    document.getElementById('count').textContent = state.modules;
+    document.getElementById('d50').setAttribute('aria-pressed', state.depth === 50);
+    document.getElementById('d70').setAttribute('aria-pressed', state.depth === 70);
+    document.getElementById('d60').setAttribute('aria-pressed', state.depth === 60);
+  }
+
+  document.getElementById('d50').onclick = () => { state.depth = 50; rebuild(true); };
+  document.getElementById('d70').onclick = () => { state.depth = 70; rebuild(true); };
+  document.getElementById('d60').onclick = () => { state.depth = 60; rebuild(true); };
+  document.getElementById('shuffle').onclick = () => { state.seed = Math.floor(Math.random() * 1e9); rebuild(false); };
+  document.getElementById('less').onclick = () => { state.modules = Math.max(1, state.modules - 1); rebuild(true); };
+  document.getElementById('more').onclick = () => { state.modules = Math.min(4, state.modules + 1); rebuild(true); };
+  document.getElementById('reset').onclick = () => fit();
+
+  const pts = new Map(); let lastDist = 0;
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    lastDist = 0;
+  });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) {
+      th -= dx * 0.007;
+      ph = Math.min(1.53, Math.max(0.12, ph - dy * 0.007));
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastDist) radius = Math.min(2000, Math.max(100, radius * lastDist / d));
+      lastDist = d;
+    }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = 0; };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    radius = Math.min(2000, Math.max(100, radius * Math.exp(e.deltaY * 0.001)));
+  }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+  rebuild(true);
+  applyTheme();
+  resize();
+
+  (function loop() {
+    camera.position.set(
+      target.x + radius * Math.sin(ph) * Math.sin(th),
+      target.y + radius * Math.cos(ph),
+      target.z + radius * Math.sin(ph) * Math.cos(th)
+    );
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rack de neumáticos · v0</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eceeea;
+    --panel: #ffffff;
+    --ink: #1c2420;
+    --muted: #59645e;
+    --line: #cbd1cc;
+    --accent: #b8470a;
+    --accent-ink: #ffffff;
+    --btn: #e1e6e2;
+    --grid: #bcc4be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #1a201d;
+      --panel: #1c2320;
+      --ink: #e5eae7;
+      --muted: #93a099;
+      --line: #33403a;
+      --accent: #ff8a3d;
+      --accent-ink: #1a0e05;
+      --btn: #29332f;
+      --grid: #2f3a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--panel); color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 17px; font-weight: 650; }
+  #readout { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  #stage { position: relative; flex: 1 1 auto; min-height: 260px; background: var(--bg); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 6px; }
+  .group > span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; min-height: 40px; cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #count { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  details { border-top: 1px solid var(--line); padding: 0 16px; font-size: 13.5px; line-height: 1.5; max-height: 40vh; overflow: auto; }
+  summary { padding: 11px 0; cursor: pointer; font-weight: 600; }
+  details ul { margin: 0 0 10px; padding-left: 18px; }
+  details li { margin: 2px 0; }
+  details h2 { margin: 8px 0 4px; font-size: 13.5px; }
+  .pending li::marker { color: var(--accent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rack de neumáticos · v0</h1>
+  <p id="readout"></p>
+</header>
+<div id="stage">
+  <canvas id="cv" aria-label="Vista 3D de Rack de neumáticos · v0. Arrastra para girar, pellizca para acercar."></canvas>
+  <div class="hint">Arrastra para girar · pellizca o rueda para acercar</div>
+</div>
+<div class="controls">
+  <div class="group" role="group" aria-label="Módulos en hilera">
+    <span>Módulos</span>
+    <button id="less" aria-label="Quitar un módulo">−</button>
+    <span id="count">1</span>
+    <button id="more" aria-label="Agregar un módulo">+</button>
+  </div>
+  <button id="reset">Vista inicial</button>
+</div>
+<details>
+  <summary>Qué está confirmado y qué falta validar</summary>
+  <h2>Confirmado</h2>
+  <ul>
+    <li>4 pisos de neumáticos de alto, negro, altura total de unos 3,5 m (dato tuyo).</li>
+    <li>Módulo de 210 cm de largo y 60 cm de fondo (cuerpo cerrado del plano).</li>
+  </ul>
+  <h2>Supuestos por validar</h2>
+  <ul class="pending">
+    <li>El rótulo del plano dice 210 × 70 cm; el cuerpo dibujado mide 210 × 60 cm y lleva dos franjas de 10 cm aparte. Usé 60 cm.</li>
+    <li>Pisos a 30, 115, 200 y 285 cm, parejos. Falta medirlos.</li>
+    <li>Montantes de 6 × 6 cm, vigas de 8 × 4 cm y 3 travesaños por nivel. La estructura real puede ser distinta.</li>
+    <li>No incluye neumáticos.</li>
+  </ul>
+</details>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*BUILD_START*/
+const SPEC = {
+  L: 210,                          // largo de un módulo (cm), plano
+  D: 60,                           // fondo del cuerpo cerrado dibujado en el plano
+  H: 350,                          // altura total aprox. (dato tuyo)
+  POST: 6,                         // montante cuadrado
+  BEAM_H: 8, BEAM_T: 4,            // vigas de cada nivel
+  LEVELS: [30, 115, 200, 285],     // 4 pisos de neumáticos, parejos (estimado)
+  CROSS: 3                         // travesaños de apoyo por nivel
+};
+
+function buildNeumaticos(THREE, o, mats) {
+  const S = SPEC, M = o.modules, Lt = S.L * M, D = S.D;
+  const g = new THREE.Group();
+  const box = (sx, sy, sz, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mats.frame);
+    m.position.set(x, y, z); g.add(m);
+  };
+  const postX = i => i === 0 ? S.POST / 2 : (i === M ? Lt - S.POST / 2 : i * S.L);
+  const zB = S.POST / 2, zF = D - S.POST / 2;
+  for (let i = 0; i <= M; i++) [zB, zF].forEach(z => box(S.POST, S.H, S.POST, postX(i), S.H / 2, z));
+  const levels = S.LEVELS.concat([S.H - S.BEAM_H / 2 - 0.01 + S.BEAM_H / 2]);   // último: amarre superior
+  levels.forEach((lv, k) => {
+    const top = k === S.LEVELS.length;
+    const y = top ? S.H - S.BEAM_H / 2 : lv - S.BEAM_H / 2;
+    for (let m = 0; m < M; m++) {
+      const len = S.L - S.POST, cx = m * S.L + S.L / 2;
+      box(len, S.BEAM_H, S.BEAM_T, cx, y, zB);
+      box(len, S.BEAM_H, S.BEAM_T, cx, y, zF);
+      if (!top) for (let c = 1; c <= S.CROSS; c++) box(4, 3, D - 2 * S.POST, m * S.L + S.POST + c * (len - S.POST) / (S.CROSS + 1) + S.POST / 2, y + S.BEAM_H / 2 - 1.5, D / 2);
+    }
+    for (let i = 0; i <= M; i++) box(S.BEAM_T, S.BEAM_H * 0.7, D - 2 * S.POST, postX(i), y, D / 2);
+  });
+  g.userData = { length: Lt, depth: D, height: S.H, levels: S.LEVELS.length };
+  return g;
+}
+/*BUILD_END*/
+
+if (typeof window !== 'undefined') {
+  const cv = document.getElementById('cv'), stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 5, 5000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 1.0));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(300, 600, 500); scene.add(sun);
+  const sun2 = new THREE.DirectionalLight(0xffffff, 0.6); sun2.position.set(-250, 350, 500); scene.add(sun2);
+  const dotTex = (() => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#26282b'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#5b6065';
+    [[16, 16], [48, 48]].forEach(([a, b]) => { x.beginPath(); x.arc(a, b, 4.2, 0, Math.PI * 2); x.fill(); });
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+  })();
+  const mats = { frame: new THREE.MeshStandardMaterial({ color: 0x2b2e31, roughness: 0.5, metalness: 0.3 }) };
+  let state = { modules: 1 };
+  let model = null, grid = null;
+  let target = new THREE.Vector3(), th = 0.55, ph = 1.2, radius = 400;
+  const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function applyTheme() {
+    scene.background = new THREE.Color(cssVar('--bg'));
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+    grid = new THREE.GridHelper(1400, 140, new THREE.Color(cssVar('--grid')), new THREE.Color(cssVar('--grid')));
+    grid.position.set(target.x, -0.05, target.z); scene.add(grid);
+  }
+  function fit() {
+    const u = model.userData;
+    target.set(u.length / 2, u.height * 0.5, u.depth / 2);
+    radius = Math.max(u.height * 2.2, u.length * 1.5, 220);
+    th = 0.55; ph = 1.2;
+    if (grid) grid.position.set(target.x, -0.05, target.z);
+  }
+  function rebuild(resetView) {
+    if (model) { scene.remove(model); model.traverse(n => { if (n.geometry) n.geometry.dispose(); }); }
+    model = buildNeumaticos(THREE, state, mats);
+    scene.add(model);
+    if (resetView) fit();
+    const u = model.userData;
+    document.getElementById('readout').textContent = `${state.modules} ${state.modules === 1 ? 'módulo' : 'módulos'} · ${u.length} × ${u.depth} cm · alto ${u.height} cm · ${u.levels} pisos`;
+    document.getElementById('count').textContent = state.modules;
+  }
+  
+  document.getElementById('less').onclick = () => { state.modules = Math.max(1, state.modules - 1); rebuild(true); };
+  document.getElementById('more').onclick = () => { state.modules = Math.min(3, state.modules + 1); rebuild(true); };
+  document.getElementById('reset').onclick = () => fit();
+  const pts = new Map(); let lastDist = 0;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); lastDist = 0; });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 1) { th -= dx * 0.007; ph = Math.min(1.53, Math.max(0.12, ph - dy * 0.007)); }
+    else if (pts.size === 2) { const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (lastDist) radius = Math.min(2500, Math.max(90, radius * lastDist / d)); lastDist = d; }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); radius = Math.min(2500, Math.max(90, radius * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(stage);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  rebuild(true); applyTheme(); resize();
+  (function loop() {
+    camera.position.set(target.x + radius * Math.sin(ph) * Math.sin(th), target.y + radius * Math.cos(ph), target.z + radius * Math.sin(ph) * Math.cos(th));
+    camera.lookAt(target); renderer.render(scene, camera); requestAnimationFrame(loop);
+  })();
+}
+</script>
+</body>
+</html>
