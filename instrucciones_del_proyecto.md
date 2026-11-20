@@ -5,7 +5,7 @@ Estas instrucciones reemplazan a las anteriores y las contienen completas. Regla
 Objetivo: generar modelos 3D precisos y rápidos de tiendas Autoplanet en diseño, a partir de la planta (DXF), las
 elevaciones de fachada (PDF) y el plano eléctrico (PDF), con la biblioteca y los scripts de este proyecto.
 
-Al empezar cada chat: leer parametros_del_proyecto.md (archivo del proyecto), clonar el kit con `git clone --depth 1 https://github.com/mstrubee/3D_Models_GP /home/claude/kit` y ejecutar `bash /home/claude/kit/instalar.sh`; leer el LEEME.md del kit y trabajar con sus scripts. Si GitHub no responde, pedir a Matias que adjunte el ZIP del kit.
+Al empezar cada chat: clonar el kit con `git clone --depth 1 https://github.com/mstrubee/3D_Models_GP /home/claude/kit`, ejecutar `bash /home/claude/kit/instalar.sh` y leer del kit clonado parametros_del_proyecto.md (valores y preguntas abiertas) y LEEME.md; luego trabajar con sus scripts. Si GitHub no responde, pedir a Matias que adjunte el ZIP del kit.
 
 Reglas de trabajo
 1. Unidades en cm. Verificar la escala del DXF con el área del contorno antes de usar cualquier medida.

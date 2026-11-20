@@ -71,7 +71,7 @@ de un solo archivo HTML, con vuelo tipo dron, recorrido exportable en video, cie
 
 ## Dónde vive el kit (versión 2.1)
 - Repositorio público: https://github.com/mstrubee/3D_Models_GP. Al empezar un chat: `git clone --depth 1 https://github.com/mstrubee/3D_Models_GP /home/claude/kit` y luego `bash /home/claude/kit/instalar.sh`.
-- En "Contexto" del proyecto solo queda `parametros_del_proyecto.md` (valores y preguntas abiertas); las reglas completas están en el cuadro de instrucciones y en `instrucciones_del_proyecto.md` de este repo.
+- "Contexto" del proyecto queda vacío (no consume contexto): todo vive en este repo. Las reglas completas están en el cuadro de instrucciones del proyecto y en `instrucciones_del_proyecto.md`; los valores y las preguntas abiertas, en `parametros_del_proyecto.md`. Al cambiar un parámetro o responder una pregunta abierta, se actualiza este repo (regla 44).
 - Claude no puede subir cambios al repo: entrega los archivos y los comandos `git add . && git commit -m "..." && git push`.
 - Respaldo sin GitHub: el ZIP completo del kit, o `scripts/empaquetar_kit.py` (deja el kit en archivos de texto y un desempaquetador). El repo no incluye los resultados grandes de ejemplo (tienda_*.html, fotos y capturas); se regeneran con los scripts.
 
